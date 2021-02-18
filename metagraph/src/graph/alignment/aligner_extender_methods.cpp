@@ -96,7 +96,7 @@ template <typename NodeType,
           typename ProfileOp>
 bool update_column(const DeBruijnGraph &graph_,
                    const DBGAlignerConfig &config_,
-                   const Column &column_prev,
+                   Column &column_prev,
                    Scores &next_column,
                    char c,
                    size_t start,
@@ -107,14 +107,16 @@ bool update_column(const DeBruijnGraph &graph_,
                    const Alignment<NodeType> &seed_) {
     typedef DefaultColumnExtender<NodeType> Extender;
 
-    auto &[S, E, F, OS, OE, OF, prev_node, PS, PF, offset, max_pos] = next_column;
+    auto &[S, E, F, OS, OE, OF, prev_node, PS, PF, offset, max_pos, is_parent]
+        = next_column;
     size_t cur_size = S.size();
     assert(cur_size + offset <= size);
 
     auto &[S_prev, E_prev, F_prev, OS_prev, OE_prev, OF_prev,
-           prev_node_prev, PS_prev, PF_prev, offset_prev, max_pos_prev]
+           prev_node_prev, PS_prev, PF_prev, offset_prev, max_pos_prev, is_parent_prev]
         = column_prev[std::get<2>(prev_node)];
     assert(S_prev.size() + offset_prev <= size);
+    is_parent_prev = true;
 
     // compute column boundaries for updating the match and deletion scores
 
@@ -302,7 +304,7 @@ backtrack(const Table &table_,
     std::string seq;
     NodeType start_node = 0;
 
-    const auto &[S, E, F, OS, OE, OF, prev, PS, PF, offset, max_pos]
+    const auto &[S, E, F, OS, OE, OF, prev, PS, PF, offset, max_pos, is_parent]
         = table_.find(std::get<0>(best_node))->second.first[std::get<2>(best_node)];
 
     score_t max_score = S[max_pos - offset];
@@ -315,7 +317,7 @@ backtrack(const Table &table_,
 
     size_t pos = max_pos;
     while (true) {
-        const auto &[S, E, F, OS, OE, OF, prev, PS, PF, offset, max_pos]
+        const auto &[S, E, F, OS, OE, OF, prev, PS, PF, offset, max_pos, is_parent]
             = table_.find(std::get<0>(best_node))->second.first[std::get<2>(best_node)];
 
         assert(last_op == Cigar::MATCH || last_op == Cigar::MISMATCH);
@@ -364,7 +366,7 @@ backtrack(const Table &table_,
             } break;
             case Cigar::DELETION: {
                 while (last_op == Cigar::DELETION) {
-                    const auto &[S, E, F, OS, OE, OF, prev, PS, PF, offset, max_pos]
+                    const auto &[S, E, F, OS, OE, OF, prev, PS, PF, offset, max_pos, is_parent]
                         = table_.find(std::get<0>(best_node))->second.first[std::get<2>(best_node)];
                     last_op = OF[pos - offset];
                     assert(last_op == Cigar::MATCH || last_op == Cigar::DELETION);
@@ -423,11 +425,11 @@ auto DefaultColumnExtender<NodeType>::get_extensions(score_t min_path_score)
             ScoreVec(1, ninf), ScoreVec(1, ninf), ScoreVec(1, ninf),
             OpVec(1, Cigar::CLIPPED), OpVec(1, Cigar::CLIPPED), OpVec(1, Cigar::CLIPPED),
             AlignNode{}, PrevVec(1, NONE), PrevVec(1, NONE),
-            0 /* offset */, 0 /* max_pos */
+            0 /* offset */, 0 /* max_pos */, false /* is_parent */
         ) }, false }
     ).first.value().first[0];
     sanitize(first_column);
-    auto &[S, E, F, OS, OE, OF, prev_node, PS, PF, offset, max_pos] = first_column;
+    auto &[S, E, F, OS, OE, OF, prev_node, PS, PF, offset, max_pos, is_parent] = first_column;
 
     size_t num_columns = 1;
     constexpr size_t column_vector_size = sizeof(std::pair<NodeType, std::pair<Column, bool>>);
@@ -450,21 +452,59 @@ auto DefaultColumnExtender<NodeType>::get_extensions(score_t min_path_score)
     boost::container::priority_deque<Ref, std::vector<Ref>, utils::LessSecond> best_starts;
     best_starts.emplace(start_node, S[0]);
 
-    std::priority_queue<Ref, std::vector<Ref>, utils::LessSecond> stack;
+    boost::container::priority_deque<Ref, std::vector<Ref>, utils::LessSecond> stack;
     stack.emplace(start_node, 0);
 
     while (stack.size()) {
-        AlignNode prev = stack.top().first;
-        stack.pop();
+        AlignNode prev = stack.maximum().first;
+        stack.pop_maximum();
+
+        if (!table_.count(std::get<0>(prev)))
+            continue;
+
+        auto prune_search = [&]() {
+            if (best_starts.empty()) {
+                DEBUG_LOG("Nothing to prune, stopping extension");
+                return false;
+            }
+
+            while (best_starts.size()) {
+                const Ref &bottom = best_starts.minimum();
+                const auto &[node, c, depth] = bottom.first;
+                if (!table_.count(node)) {
+                    best_starts.pop_minimum();
+                    continue;
+                }
+
+                std::vector<Scores> &columns = table_[node].first;
+
+                if (depth + 1 != columns.size() || std::get<11>(columns.back())) {
+                    DEBUG_LOG("Can't prune lowest-scoring column, stopping extension");
+                    return false;
+                }
+
+                total_size -= get_column_size(columns.back());
+                --num_columns;
+                columns.pop_back();
+                if (columns.empty())
+                    table_.erase(node);
+
+                best_starts.pop_minimum();
+            }
+
+            return true;
+        };
 
         if (total_size > config_.max_ram_per_alignment * 1000000) {
-            DEBUG_LOG("Alignment RAM limit reached, stopping extension");
-            break;
+            DEBUG_LOG("Alignment RAM limit reached, trying to prune search");
+            if (!prune_search())
+                break;
         }
 
         if (num_columns > config_.max_nodes_per_seq_char * extend_window_.size()) {
-            DEBUG_LOG("Alignment node limit reached, stopping extension");
-            break;
+            DEBUG_LOG("Alignment node limit reached, trying to prune search");
+            if (!prune_search())
+                break;
         }
 
         for (const auto &[next, c] : get_outgoing(prev)) {
@@ -495,11 +535,11 @@ auto DefaultColumnExtender<NodeType>::get_extensions(score_t min_path_score)
                 OpVec(cur_size, Cigar::CLIPPED), OpVec(cur_size, Cigar::CLIPPED),
                 OpVec(cur_size, Cigar::CLIPPED),
                 prev, PrevVec(cur_size, NONE), PrevVec(cur_size, NONE),
-                min_i - 1 /* offset */, 0 /* max_pos */
+                min_i - 1 /* offset */, 0 /* max_pos */, false /* is_parent */
             );
             sanitize(next_column);
             if (std::get<0>(prev) == graph_.max_index() + 1 && !std::get<2>(prev)) {
-                auto &[S, E, F, OS, OE, OF, prev_node, PS, PF, offset, max_pos]
+                auto &[S, E, F, OS, OE, OF, prev_node, PS, PF, offset, max_pos, is_parent]
                     = next_column;
                 S[1 - offset] = seed_->get_score();
                 OS[1 - offset] = seed_->get_cigar().back().first;
@@ -515,7 +555,8 @@ auto DefaultColumnExtender<NodeType>::get_extensions(score_t min_path_score)
                                                    profile_op_, *seed_);
             sanitize(next_column);
 
-            auto &[S, E, F, OS, OE, OF, prev_node, PS, PF, offset, max_pos] = next_column;
+            auto &[S, E, F, OS, OE, OF, prev_node, PS, PF, offset, max_pos, is_parent]
+                = next_column;
 
             auto max_it = std::max_element(S.begin(), S.end());
             max_pos = (max_it - S.begin()) + offset;
@@ -524,11 +565,7 @@ auto DefaultColumnExtender<NodeType>::get_extensions(score_t min_path_score)
             converged = !updated || has_converged(column_pair);
 
             AlignNode cur{ next, c, depth };
-            if (best_starts.size() < config_.num_alternative_paths) {
-                best_starts.emplace(cur, *max_it);
-            } else if (*max_it > best_starts.minimum().second) {
-                best_starts.update(best_starts.begin(), Ref{ cur, *max_it });
-            }
+            best_starts.emplace(cur, *max_it);
 
             assert(match_score_begin_[max_pos]
                 == config_.match_score(extend_window_.substr(max_pos)));
@@ -542,12 +579,19 @@ auto DefaultColumnExtender<NodeType>::get_extensions(score_t min_path_score)
     }
 
     std::vector<std::pair<DBGAlignment, NodeType>> extensions;
-    while (best_starts.size()) {
+    while (best_starts.size() && extensions.size() < config_.num_alternative_paths) {
         auto [best_node, max_score] = best_starts.maximum();
         best_starts.pop_maximum();
+        if (!table_.count(std::get<0>(best_node)))
+            continue;
 
-        const auto &[S, E, F, OS, OE, OF, prev, PS, PF, offset, max_pos]
-            = table_[std::get<0>(best_node)].first[std::get<2>(best_node)];
+        const auto &column = table_[std::get<0>(best_node)].first;
+
+        if (std::get<2>(best_node) >= column.size())
+            continue;
+
+        const auto &[S, E, F, OS, OE, OF, prev, PS, PF, offset, max_pos, is_parent]
+            = column[std::get<2>(best_node)];
 
         assert(S[max_pos - offset] == max_score);
 
@@ -574,7 +618,7 @@ void DefaultColumnExtender<NodeType>
         size_t start = query_.size();
         size_t end = 0;
         for (const auto &column : columns.first) {
-            const auto &[S, E, F, OS, OE, OF, prev, PS, PF, offset, max_pos] = column;
+            const auto &[S, E, F, OS, OE, OF, prev, PS, PF, offset, max_pos, is_parent] = column;
 
             auto it = std::find_if(S.begin(), S.end(), [](score_t s) { return s > 0; });
             size_t start_c = (it - S.begin()) + offset;
@@ -595,8 +639,8 @@ bool DefaultColumnExtender<NodeType>::has_converged(const Column &column) {
     if (column.first.size() <= 1)
         return false;
 
-    const auto &[S, E, F, OS, OE, OF, prev, PS, PF, offset, max_pos] = column.first.back();
-    const auto &[S_b, E_b, F_b, OS_b, OE_b, OF_b, prev_b, PS_b, PF_b, offset_b, max_pos_b]
+    const auto &[S, E, F, OS, OE, OF, prev, PS, PF, offset, max_pos, is_parent] = column.first.back();
+    const auto &[S_b, E_b, F_b, OS_b, OE_b, OF_b, prev_b, PS_b, PF_b, offset_b, max_pos_b, is_parent_b]
         = column.first[column.first.size() - 2];
 
     return offset == offset_b && max_pos == max_pos_b
@@ -607,7 +651,7 @@ bool DefaultColumnExtender<NodeType>::has_converged(const Column &column) {
 
 template <typename NodeType>
 void DefaultColumnExtender<NodeType>::sanitize(Scores &scores) {
-    auto &[S, E, F, OS, OE, OF, prev, PS, PF, offset, max_pos] = scores;
+    auto &[S, E, F, OS, OE, OF, prev, PS, PF, offset, max_pos, is_parent] = scores;
 
     size_t size = S.size();
     size_t pad_size = ((size + 7) / 8) * 8 + 8;

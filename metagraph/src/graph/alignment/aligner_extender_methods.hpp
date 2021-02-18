@@ -82,7 +82,8 @@ class DefaultColumnExtender : public IExtender<NodeType> {
                        OpVec, OpVec, OpVec, AlignNode,
                        PrevVec, PrevVec,
                        size_t /* offset */,
-                       size_t /* max_pos */> Scores;
+                       size_t /* max_pos */,
+                       bool /* is_parent */> Scores;
     typedef std::pair<std::vector<Scores>, bool> Column;
 
     tsl::hopscotch_map<NodeType, Column> table_;
