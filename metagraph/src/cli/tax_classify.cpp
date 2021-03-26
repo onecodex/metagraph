@@ -1,6 +1,6 @@
-#include "tax_classify.hpp"
+#include "taxo_classify.hpp"
 
-#include "annotation/taxonomy/tax_classifier.hpp"
+#include "annotation/taxonomy/taxo_classifier.hpp"
 #include "common/threads/threading.hpp"
 #include "common/unix_tools.hpp"
 #include "config/config.hpp"

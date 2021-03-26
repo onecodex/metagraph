@@ -55,12 +55,17 @@ def main(argv: [str]):
         taxoDB=path_to_taxo_db,
         lca_coverage=lca_coverage
     )
-    res = subprocess.run([tax_class_command], shell=True, stdout=PIPE)
+    res = subprocess.run([tax_class_command], shell=True, stdout=PIPE, stderr=PIPE)
     print("finished tax_class")
     if res.returncode != 0:
         print(res)
         exit(1)
     res_lines = res.stdout.decode().rstrip().split('\n')
+
+    with open('tmp.txt', 'w') as f:
+        for line in res_lines:
+            print(line, file=f)
+
 
     percent_perfect_match = 0
     percent_ancestor_match = 0
@@ -71,17 +76,25 @@ def main(argv: [str]):
 
     num_lines = 0
 
+    saved_lines = {}
+
     for line in res_lines:
         if line == "":
             continue
         num_lines += 1
         if num_lines % 10000 == 0:
             print("processing", num_lines)
+            print(line)
         label = line.split(" ")[1].split("|")[3]
     
         if label not in lookup_label_taxid:
             inexistent_label += 1
             continue
+
+        # print("curr str:", (line.split(" ")[1].split("|")[4])[1: -1])
+        index_read = int((line.split(" ")[1].split("|")[4])[1: -1] )
+        if index_read >= 50 and index_read <= 80:
+            saved_lines[index_read] = line
 
         expected_taxid = lookup_label_taxid[label]
         predicted_taxid = line.split(" ")[7].split("'")[1]
@@ -109,6 +122,9 @@ def main(argv: [str]):
     percent_fail /= num_lines
     percent_root_match /= num_lines
     inexistent_label /= num_lines
+
+    for i in range(50, 80):
+        print(saved_lines[i])
 
     print("percent_perfect_match", "%.3f" %  percent_perfect_match)
     print("percent_root_match", "%.3f" % percent_root_match)
