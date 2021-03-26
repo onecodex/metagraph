@@ -60,6 +60,7 @@ class TaxonomyDB {
 
 
   private:
+<<<<<<< HEAD
     /**
      * Reads and returns the taxonomic tree
      *
@@ -100,6 +101,8 @@ class TaxonomyDB {
                         const ChildrenList &tree,
                         std::vector<NormalizedTaxId> *tree_linearization);
 
+=======
+>>>>>>> fix the issues related to multithreading
     /**
      * node_depth returns the depth for each node in the taxonomic tree.
      * The root is the unique node with maximal depth and all the leaves have depth 1.

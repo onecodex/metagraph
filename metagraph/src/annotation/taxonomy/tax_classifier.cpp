@@ -129,13 +129,21 @@ TaxId TaxClassifier::assign_class(const mtg::graph::DeBruijnGraph &graph,
     tsl::hopscotch_map<TaxId, uint64_t> num_kmers_per_node;
     uint64_t total_kmers = 0;
 
+//    std::cerr << "start one --> <" << sequence << ">\n";
+
     graph.map_to_nodes(sequence, [&](const uint64_t &i) {
-      if (i > 0 && taxonomic_map[i - 1] > 0) {
-          // We need this i-1, because of the way how annotation cmd is implemented.
-          num_kmers_per_node[taxonomic_map[i - 1]]++;
-          total_kmers++;
-      }
+//        std:: cerr << "i=" << i << "  ";
+        if (i > 0 && taxonomic_map[i - 1] > 0) {
+            // We need this i-1, because of the way how annotation cmd is implemented.
+            num_kmers_per_node[taxonomic_map[i - 1]]++;
+            total_kmers++;
+//            std::cerr << taxonomic_map[i - 1] << " ";
+        }
     });
+//    std::cerr << "\nnum_kmers_per_node\n";
+//    for (auto &it: num_kmers_per_node) {
+//        std::cerr << it.first << "\t" << it.second << "\n";
+//    }
 
     tsl::hopscotch_set<TaxId> nodes_already_propagated;
     tsl::hopscotch_map<TaxId, uint64_t> node_scores;
@@ -149,6 +157,8 @@ TaxId TaxClassifier::assign_class(const mtg::graph::DeBruijnGraph &graph,
                               node_scores, nodes_already_propagated, best_lca,
                               best_lca_dist_to_root);
     }
+
+    std::cerr << best_lca << " \t= final answer \n\n";
     return best_lca;
 }
 

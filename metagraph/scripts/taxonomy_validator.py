@@ -48,7 +48,7 @@ def main(argv: [str]):
     print("after taxo parents")
 
     tax_class_command = '{exe} tax_class -i {dbg} {fasta_queries} --taxonomic-tree {taxoDB} \
-                            --lca-coverage-threshold {lca_coverage} -p 20'.format(
+                            --lca-coverage-threshold {lca_coverage} -p 10'.format(
         exe="./metagraph",
         dbg=path_to_dbg,
         fasta_queries=path_to_queries,
@@ -81,6 +81,7 @@ def main(argv: [str]):
     for line in res_lines:
         if line == "":
             continue
+        print("line->" + line)
         num_lines += 1
         if num_lines % 10000 == 0:
             print("processing", num_lines)
