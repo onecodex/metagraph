@@ -9,7 +9,6 @@
 #include <future>
 #include <functional>
 #include <atomic>
-#include <iostream>
 
 void set_num_threads(unsigned int num_threads);
 unsigned int get_num_threads();
@@ -70,10 +69,6 @@ class ThreadPool {
             (*task)();
             future.get(); // re-thrown exceptions (if any) from packaged_task
         };
-
-        if (force) {
-            std::cerr << "force\n";
-        }
 
         if (!workers.size()) {
             wrapped_task();

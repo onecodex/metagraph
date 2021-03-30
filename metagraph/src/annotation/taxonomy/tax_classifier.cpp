@@ -1,4 +1,4 @@
-#include "taxo_classifier.hpp"
+#include "tax_classifier.hpp"
 
 #include <cmath>
 #include <filesystem>
@@ -120,8 +120,9 @@ void TaxClassifier::update_scores_and_lca(const TaxId start_node,
 }
 
 TaxId TaxClassifier::assign_class(const mtg::graph::DeBruijnGraph &graph,
-                                   const std::string &sequence,
-                                   const double &lca_coverage_threshold) const {
+                                  const std::string &sequence,
+                                  const double &lca_coverage_threshold,
+                                  const double allowed_notfound_kmers) const {
     if (lca_coverage_threshold <= 0.5 || lca_coverage_threshold > 1) {
         logger->error("Error: received lca coverage threshold must have a value 0.5 < lca_coverage_threshold <= 1, current value is: {}. Please modify its value to be a percent strictly greater than 0.5 for having a unique taxid lca solution.", lca_coverage_threshold);
         exit(1);
@@ -132,7 +133,7 @@ TaxId TaxClassifier::assign_class(const mtg::graph::DeBruijnGraph &graph,
 //    std::cerr << "start one --> <" << sequence << ">\n";
 
     graph.map_to_nodes(sequence, [&](const uint64_t &i) {
-//        std:: cerr << "i=" << i << "  ";
+//        std:: cerr << "i=" << i << "  total_kmers=" << total_kmers << "\n";
         if (i > 0 && taxonomic_map[i - 1] > 0) {
             // We need this i-1, because of the way how annotation cmd is implemented.
             num_kmers_per_node[taxonomic_map[i - 1]]++;
@@ -140,6 +141,12 @@ TaxId TaxClassifier::assign_class(const mtg::graph::DeBruijnGraph &graph,
 //            std::cerr << taxonomic_map[i - 1] << " ";
         }
     });
+
+//    cerr << "total_kmers=" << total_kmers << " sequence.size()=" << sequence.size() << " graph.get_k()=" << graph.get_k() << "\n";
+    if (total_kmers / (sequence.size() - graph.get_k() + 1) < allowed_notfound_kmers) {
+        return 0;
+    }
+
 //    std::cerr << "\nnum_kmers_per_node\n";
 //    for (auto &it: num_kmers_per_node) {
 //        std::cerr << it.first << "\t" << it.second << "\n";
@@ -158,7 +165,6 @@ TaxId TaxClassifier::assign_class(const mtg::graph::DeBruijnGraph &graph,
                               best_lca_dist_to_root);
     }
 
-    std::cerr << best_lca << " \t= final answer \n\n";
     return best_lca;
 }
 

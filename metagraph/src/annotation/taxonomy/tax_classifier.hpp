@@ -41,7 +41,7 @@ class TaxClassifier {
     TaxId assign_class(const mtg::graph::DeBruijnGraph &graph,
                        const std::string &sequence,
                        const double &lca_coverage_threshold,
-                       const bool debug) const;
+                       const double allowed_notfound_kmers = 0.8) const;
 
   private:
     /**
