@@ -15,6 +15,23 @@ namespace cli {
 
 using mtg::common::logger;
 
+uint64_t SIZE_EXECUTE_BATCH = 10000;
+
+void execute_fasta_seq(std::string curr_seq,
+                         std::string curr_seq_name,
+                         const mtg::graph::DeBruijnGraph &graph,
+                         const mtg::annot::TaxClassifier &tax_classifier,
+                         std::vector<std::pair<std::string, uint64_t> > &results,
+                         std::mutex &result_mutex,
+                         const Config &config) {
+    uint64_t taxid = tax_classifier.assign_class(graph,
+                                                 curr_seq,
+                                                 config.lca_coverage_threshold,
+                                                 config.discovery_fraction);
+    std::unique_lock<std::mutex> lock(result_mutex);
+    results.push_back({curr_seq_name, taxid});
+}
+
 void execute_fasta_file(const string &file,
                         ThreadPool &thread_pool,
                         const mtg::graph::DeBruijnGraph &graph,
@@ -26,17 +43,34 @@ void execute_fasta_file(const string &file,
     seq_io::FastaParser fasta_parser(file);
     std::mutex result_mutex;
 
+    std::vector<std::pair<std::string, std::string>> seq_batch;
+
+    uint64_t cnt_queries_executed = 0;
     for (const seq_io::kseq_t &kseq : fasta_parser) {
-        std::string curr_seq = std::string(kseq.seq.s);
-        std::string curr_seq_name = std::string(kseq.name.s);
-        thread_pool.enqueue([&](std::string curr_seq, std::string curr_seq_name){
-            uint64_t taxid = tax_classifier.assign_class(graph,
-                                                          curr_seq,
-                                                          config.lca_coverage_threshold);
-            std::unique_lock<std::mutex> lock(result_mutex);
-            results.push_back({curr_seq_name, taxid});
-        }, std::move(curr_seq), std::move(curr_seq_name));
+        seq_batch.push_back({std::string(kseq.seq.s), std::string(kseq.name.s)});
+
+        if (seq_batch.size() != SIZE_EXECUTE_BATCH) {
+            continue;
+        }
+        thread_pool.enqueue([&](std::vector<std::pair<std::string, std::string>> sequences){
+            std::cerr << "start batch of size " << sequences.size() << std::endl;
+            for (std::pair<std::string, std::string> &kseq: sequences) {
+                execute_fasta_seq(kseq.first, kseq.second, graph, tax_classifier, results, result_mutex, config);
+            }
+        }, std::move(seq_batch));
+
+        cnt_queries_executed += 1;
+        if (cnt_queries_executed % 100000 == 0) {
+            logger->trace("Started to executed {} queries.", cnt_queries_executed);
+        }
+        seq_batch.clear();
     }
+
+    thread_pool.enqueue([&](std::vector<std::pair<std::string, std::string>> sequences){
+      for (std::pair<std::string, std::string> &kseq: sequences) {
+          execute_fasta_seq(kseq.first, kseq.second, graph, tax_classifier, results, result_mutex, config);
+      }
+    }, std::move(seq_batch));
 }
 
 int taxonomic_classification(Config *config) {

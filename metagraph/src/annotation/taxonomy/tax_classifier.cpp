@@ -130,27 +130,22 @@ TaxId TaxClassifier::assign_class(const mtg::graph::DeBruijnGraph &graph,
     tsl::hopscotch_map<TaxId, uint64_t> num_kmers_per_node;
     uint64_t total_kmers = 0;
 
-//    std::cerr << "start one --> <" << sequence << ">\n";
+    uint64_t total_nonzero_kmers = 0;
 
     graph.map_to_nodes(sequence, [&](const uint64_t &i) {
-//        std:: cerr << "i=" << i << "  total_kmers=" << total_kmers << "\n";
-        if (i > 0 && taxonomic_map[i - 1] > 0) {
-            // We need this i-1, because of the way how annotation cmd is implemented.
-            num_kmers_per_node[taxonomic_map[i - 1]]++;
+        if (i <= 0) {
+            return;
+        }
+        total_nonzero_kmers += 1;
+        if (i > 0 && taxonomic_map[i - 1]) {
+            num_kmers_per_node[taxonomic_map[i - 1]] ++;
             total_kmers++;
-//            std::cerr << taxonomic_map[i - 1] << " ";
         }
     });
 
-//    cerr << "total_kmers=" << total_kmers << " sequence.size()=" << sequence.size() << " graph.get_k()=" << graph.get_k() << "\n";
-    if (total_kmers / (sequence.size() - graph.get_k() + 1) < allowed_notfound_kmers) {
+    if ((double)total_kmers / total_nonzero_kmers < allowed_notfound_kmers) {
         return 0;
     }
-
-//    std::cerr << "\nnum_kmers_per_node\n";
-//    for (auto &it: num_kmers_per_node) {
-//        std::cerr << it.first << "\t" << it.second << "\n";
-//    }
 
     tsl::hopscotch_set<TaxId> nodes_already_propagated;
     tsl::hopscotch_map<TaxId, uint64_t> node_scores;

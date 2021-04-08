@@ -72,7 +72,7 @@ def main(argv: [str]):
     percent_descendant_match = 0
     percent_fail = 0
     percent_root_match = 0
-    inexistent_label = 0
+    nonexistent_label = 0
     not_classified = 0
 
     num_lines = 0
@@ -90,7 +90,7 @@ def main(argv: [str]):
         label = line.split(" ")[1].split("|")[3]
     
         if label not in lookup_label_taxid:
-            inexistent_label += 1
+            nonexistent_label += 1
             continue
 
         expected_taxid = lookup_label_taxid[label]
@@ -122,7 +122,7 @@ def main(argv: [str]):
     percent_descendant_match /= num_lines
     percent_fail /= num_lines
     percent_root_match /= num_lines
-    inexistent_label /= num_lines
+    nonexistent_label /= num_lines
     not_classified /= num_lines
 
     print("percent_perfect_match", "%.5f" %  percent_perfect_match)
@@ -130,7 +130,7 @@ def main(argv: [str]):
     print("percent_ancestor_match", "%.5f" % percent_ancestor_match)
     print("percent_descendant_match", "%.5f" % percent_descendant_match)
     print("percent_fail", "%.5f" % percent_fail)
-    print("inexistent_label", "%.5f" % inexistent_label)
+    print("nonexistent_label", "%.5f" % nonexistent_label)
     print("not_classified", "%.5f" % not_classified)
 
 if __name__ == '__main__':

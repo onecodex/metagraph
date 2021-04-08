@@ -1202,8 +1202,10 @@ void Config::print_usage(const std::string &prog_name, IdentityType identity) {
                         "\tEach input file is given in FASTA or FASTQ format.\n\n", prog_name.c_str());
 
             fprintf(stderr, "Available options for taxonomic classify:\n");
-            fprintf(stderr, "\t   --lca-coverage-threshold [FLOAT] fraction of covered kmers by the returned LCA's subtree and ancestors [0.66]\n");
-            fprintf(stderr, "\t-p --parallel [INT] \tuse multiple threads for computation [1]\n");
+            fprintf(stderr, "\t   --lca-coverage-threshold [FLOAT] \tfraction of covered kmers by the returned LCA's subtree and ancestors [0.66]\n");
+            fprintf(stderr, "\t-p --parallel [INT] \t\t\tuse multiple threads for computation [1]\n");
+            fprintf(stderr, "\t   --discovery-fraction [FLOAT] \tfraction of labeled k-mers required for annotation [0.7]\n");
+
         }
     }
 

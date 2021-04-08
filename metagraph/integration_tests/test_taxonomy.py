@@ -17,12 +17,15 @@ TAX_DATA_DIR = TEST_DATA_DIR + "/taxonomic_data"
 tax_tests = {
     'one_thread': {
         'threads': 1,
+        'discovery_fraction': 0,
     },
     '5_threads': {
         'threads': 5,
+        'discovery_fraction': 0,
     },
     '16_threads': {
         'threads': 16,
+        'discovery_fraction': 0,
     }
 }
 
@@ -86,13 +89,14 @@ class TestTaxonomy(unittest.TestCase):
         self.assertEqual(res.returncode, 0)
 
         tax_class_command = '{exe} tax_class -i {dbg} {fasta_queries} --taxonomic-tree {taxDB} \
-                            --lca-coverage-threshold {lca_coverage} -p {num_threads}'.format(
+                            --lca-coverage-threshold {lca_coverage} -p {num_threads} --discovery-fraction {discovery_fraction}'.format(
             exe=METAGRAPH,
             dbg=self.tempdir.name + '/graph.dbg',
             fasta_queries=TAX_DATA_DIR + '/tax_query.fa',
             taxDB=self.tempdir.name + '/taxDB.taxdb',
             lca_coverage=lca_coverage,
             num_threads=tax_tests[tax_test]['threads'],
+            discovery_fraction=tax_tests[tax_test]['discovery_fraction'],
         )
         res = subprocess.run([tax_class_command], shell=True, stdout=PIPE)
         self.assertEqual(res.returncode, 0)
